@@ -63,7 +63,8 @@ class ZeroBaseLLM(nn.Module):
             ff_dim=self.config.ff_dim,
             num_blocks=self.config.num_transformer_blocks,
             max_seq_len=self.config.max_seq_len,
-            dropout=self.config.attention_dropout
+            dropout=self.config.attention_dropout,
+            activation=getattr(self.config, "ff_activation", "gelu"),
         )
 
         # ==================== ZONE C: Word Building (Layers 9-12) ====================

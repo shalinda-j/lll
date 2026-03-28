@@ -38,7 +38,7 @@ class TransformerBlock(nn.Module):
         num_heads: int = 8,
         ff_dim: int = 512,
         dropout: float = 0.1,
-        activation: str = "relu"
+        activation: str = "gelu"
     ):
         """
         Initialize TransformerBlock.
@@ -113,7 +113,7 @@ class TransformerCore(nn.Module):
         num_blocks: int = 4,
         max_seq_len: int = 512,
         dropout: float = 0.1,
-        activation: str = "relu"
+        activation: str = "gelu"
     ):
         """
         Initialize TransformerCore.

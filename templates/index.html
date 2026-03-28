@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zero-Base LLM</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #1f2937;
+      --border: #30363d;
+      --accent: #58a6ff;
+      --accent2: #3fb950;
+      --warn: #f0883e;
+      --danger: #f85149;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --radius: 8px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ── */
+    .app { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 16px;
+    }
+    header h1 { font-size: 18px; font-weight: 700; color: var(--accent); }
+    header .tag {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    header .pill {
+      margin-left: auto;
+      background: rgba(63,185,80,.15);
+      border: 1px solid var(--accent2);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-size: 11px;
+      color: var(--accent2);
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    aside {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .card h3 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .stat-row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 13px; }
+    .stat-row span:first-child { color: var(--muted); }
+    .stat-row span:last-child { font-weight: 600; }
+
+    .score-ring {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      margin: 8px 0;
+    }
+    .score-num { font-size: 40px; font-weight: 800; color: var(--accent); line-height: 1; }
+    .score-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .metric-bar { margin: 5px 0; }
+    .metric-bar .label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+    .bar-bg { background: var(--border); border-radius: 3px; height: 5px; }
+    .bar-fill { background: var(--accent); border-radius: 3px; height: 5px; transition: width .4s; }
+
+    btn, .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 14px;
+      transition: opacity .15s;
+      width: 100%;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-green  { background: var(--accent2); color: #000; }
+    .btn-warn   { background: var(--warn); color: #000; }
+    .btn-muted  { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    .train-controls { display: flex; flex-direction: column; gap: 8px; }
+    .steps-row { display: flex; align-items: center; gap: 8px; }
+    .steps-row label { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .steps-row input[type=range] { flex: 1; accent-color: var(--accent); }
+    .steps-row span { min-width: 36px; text-align: right; font-weight: 600; }
+
+    .progress-bar { margin-top: 6px; display: none; }
+    .progress-bar.visible { display: block; }
+    .progress-track { background: var(--border); border-radius: 3px; height: 6px; }
+    .progress-fill { background: var(--warn); border-radius: 3px; height: 6px; transition: width .3s; }
+    .progress-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Chat panel ── */
+    .chat-panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 16px;
+    }
+    .tab {
+      padding: 12px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--muted);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+    .tab-content { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+    .tab-content.active { display: flex; }
+
+    /* Generate tab */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .msg { max-width: 80%; }
+    .msg.user { align-self: flex-end; }
+    .msg.model { align-self: flex-start; }
+
+    .msg-bubble {
+      padding: 10px 14px;
+      border-radius: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      font-size: 14px;
+    }
+    .msg.user .msg-bubble { background: var(--accent); color: #000; border-radius: 12px 12px 2px 12px; }
+    .msg.model .msg-bubble { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px 12px 12px 2px; }
+    .msg-meta { font-size: 11px; color: var(--muted); margin-top: 4px; padding: 0 4px; }
+
+    .typing { display: flex; gap: 4px; align-items: center; padding: 8px 12px; }
+    .typing span {
+      width: 6px; height: 6px; background: var(--muted);
+      border-radius: 50%; animation: bounce .9s infinite;
+    }
+    .typing span:nth-child(2) { animation-delay: .15s; }
+    .typing span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+    .input-bar {
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex;
+      gap: 8px;
+      background: var(--surface);
+    }
+    .input-bar textarea {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 10px 12px;
+      resize: none;
+      outline: none;
+      rows: 2;
+    }
+    .input-bar textarea:focus { border-color: var(--accent); }
+    .input-bar .send-btn {
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #000;
+      cursor: pointer;
+      font-weight: 700;
+      padding: 0 18px;
+      font-size: 16px;
+    }
+    .input-bar .send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* Prompt tab */
+    .prompt-tab {
+      flex: 1;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+    .prompt-tab label { color: var(--muted); font-size: 12px; display: block; margin-bottom: 4px; }
+    .prompt-tab textarea, .prompt-tab select, .prompt-tab input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      padding: 10px 12px;
+      width: 100%;
+      outline: none;
+    }
+    .prompt-tab textarea:focus, .prompt-tab select:focus { border-color: var(--accent); }
+    .prompt-tab textarea { resize: vertical; min-height: 80px; }
+    .prompt-controls { display: flex; gap: 8px; align-items: flex-end; }
+    .prompt-controls .field { flex: 1; }
+    .output-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      min-height: 120px;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: var(--text);
+    }
+    .output-meta { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+    /* About tab */
+    .about-tab {
+      flex: 1;
+      padding: 20px 24px;
+      overflow-y: auto;
+      line-height: 1.7;
+    }
+    .about-tab h2 { font-size: 20px; margin-bottom: 16px; color: var(--accent); }
+    .about-tab h3 { font-size: 15px; font-weight: 700; margin: 20px 0 8px; color: var(--text); }
+    .about-tab p { color: var(--muted); margin-bottom: 10px; }
+    .about-tab ul { padding-left: 20px; color: var(--muted); }
+    .about-tab ul li { margin-bottom: 6px; }
+    .zone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    .zone-card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+    .zone-card .zone-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .zone-card .zone-desc { font-size: 12px; color: var(--muted); }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 16px;
+      font-size: 13px; opacity: 0; transition: opacity .3s;
+      pointer-events: none; z-index: 999;
+    }
+    #toast.show { opacity: 1; }
+
+    @media (max-width: 700px) {
+      main { grid-template-columns: 1fr; }
+      aside { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Zero-Base LLM</h1>
+    <span class="tag">Character-level · Self-Study</span>
+    <span id="paramTag" class="tag">Loading…</span>
+    <span class="pill">● Live</span>
+  </header>
+
+  <main>
+    <!-- ── Sidebar ── -->
+    <aside>
+      <!-- Model info -->
+      <div class="card" id="modelCard">
+        <h3>Model</h3>
+        <div class="stat-row"><span>Parameters</span><span id="siParam">—</span></div>
+        <div class="stat-row"><span>Size</span><span id="siSize">—</span></div>
+        <div class="stat-row"><span>Blocks</span><span id="siBlocks">—</span></div>
+        <div class="stat-row"><span>Embed dim</span><span id="siEmbed">—</span></div>
+        <div class="stat-row"><span>FF dim</span><span id="siFf">—</span></div>
+        <div class="stat-row"><span>Activation</span><span id="siAct">—</span></div>
+        <div class="stat-row"><span>Dropout</span><span id="siDrop">—</span></div>
+      </div>
+
+      <!-- Benchmark -->
+      <div class="card">
+        <h3>Benchmark</h3>
+        <div class="score-ring">
+          <div class="score-num" id="bScore">—</div>
+          <div class="score-label">Overall Score / 100</div>
+        </div>
+        <div class="metric-bar">
+          <div class="label"><span>BPC</span><span id="bBpc">—</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="bBpcBar" style="width:0%"></div></div>
+        </div>
+        <div class="metric-bar">
+          <div class="label"><span>Top-1 Acc</span><span id="bTop1">—</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="bTop1Bar" style="width:0%; background:#3fb950"></div></div>
+        </div>
+        <div class="metric-bar">
+          <div class="label"><span>Top-5 Acc</span><span id="bTop5">—</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="bTop5Bar" style="width:0%; background:#3fb950"></div></div>
+        </div>
+        <div class="metric-bar">
+          <div class="label"><span>Fluency</span><span id="bFluency">—</span></div>
+          <div class="bar-bg"><div class="bar-fill" id="bFluencyBar" style="width:0%; background:#f0883e"></div></div>
+        </div>
+        <div class="stat-row" style="margin-top:8px"><span>Speed</span><span id="bSpeed">—</span></div>
+        <div class="stat-row"><span>Last run</span><span id="bTime" style="font-size:11px">—</span></div>
+        <button class="btn btn-muted" style="margin-top:10px" id="btnBenchmark">Run Benchmark</button>
+      </div>
+
+      <!-- Training -->
+      <div class="card">
+        <h3>Self-Improvement Training</h3>
+        <div class="train-controls">
+          <div class="steps-row">
+            <label>Steps</label>
+            <input type="range" id="stepsSlider" min="100" max="2000" step="100" value="500" />
+            <span id="stepsVal">500</span>
+          </div>
+          <button class="btn btn-warn" id="btnTrain">▶ Train Now</button>
+        </div>
+        <div class="progress-bar" id="trainProgress">
+          <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+          <div class="progress-label" id="progressLabel">Initialising…</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── Chat Panel ── -->
+    <div class="chat-panel">
+      <div class="tabs">
+        <div class="tab active" data-tab="chat">💬 Chat</div>
+        <div class="tab" data-tab="prompt">✏️ Generate</div>
+        <div class="tab" data-tab="about">ℹ️ About</div>
+      </div>
+
+      <!-- Chat tab -->
+      <div class="tab-content active" id="tab-chat">
+        <div class="messages" id="messages">
+          <div class="msg model">
+            <div class="msg-bubble">Hello! I'm Zero-Base LLM — a language model built from scratch starting from binary (0/1) representations. Type anything and I'll generate a continuation!</div>
+          </div>
+        </div>
+        <div class="input-bar">
+          <textarea id="chatInput" rows="2" placeholder="Type a message or prompt…"></textarea>
+          <button class="send-btn" id="sendBtn">➤</button>
+        </div>
+      </div>
+
+      <!-- Prompt tab -->
+      <div class="tab-content" id="tab-prompt">
+        <div class="prompt-tab">
+          <div>
+            <label>Prompt</label>
+            <textarea id="promptInput" rows="3" placeholder="Enter your starting text…">The future of artificial intelligence is</textarea>
+          </div>
+          <div class="prompt-controls">
+            <div class="field">
+              <label>Max tokens</label>
+              <input type="number" id="maxTokens" value="150" min="10" max="400" />
+            </div>
+            <div class="field">
+              <label>Temperature</label>
+              <input type="number" id="temperature" value="0.8" min="0.1" max="2.0" step="0.1" />
+            </div>
+            <div class="field">
+              <label>Strategy</label>
+              <select id="strategy">
+                <option value="nucleus">Nucleus (top-p)</option>
+                <option value="top_k">Top-k</option>
+                <option value="greedy">Greedy</option>
+                <option value="temperature">Temperature</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btnGenerate">Generate</button>
+          <div>
+            <label>Output</label>
+            <div class="output-box" id="outputBox">Output will appear here…</div>
+            <div class="output-meta" id="outputMeta"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- About tab -->
+      <div class="tab-content" id="tab-about">
+        <div class="about-tab">
+          <h2>Zero-Base LLM</h2>
+          <p>A fully custom language model built from the ground up — starting from raw binary bits (0/1) all the way to paragraph generation, with no borrowed pre-trained weights.</p>
+
+          <h3>22-Layer Architecture — 6 Zones</h3>
+          <div class="zone-grid">
+            <div class="zone-card">
+              <div class="zone-title">Zone A · Layers 0–3</div>
+              <div class="zone-desc">Binary → Byte → ASCII foundation</div>
+            </div>
+            <div class="zone-card">
+              <div class="zone-title">Zone B · Layers 4–8</div>
+              <div class="zone-desc">Multi-head transformer core (GELU)</div>
+            </div>
+            <div class="zone-card">
+              <div class="zone-title">Zone C · Layers 9–12</div>
+              <div class="zone-desc">Character clustering → word vectors</div>
+            </div>
+            <div class="zone-card">
+              <div class="zone-title">Zone D · Layers 13–18</div>
+              <div class="zone-desc">Sentence & paragraph assembly</div>
+            </div>
+            <div class="zone-card">
+              <div class="zone-title">Zone E · Layers 19–20</div>
+              <div class="zone-desc">Output projection & nucleus sampling</div>
+            </div>
+            <div class="zone-card">
+              <div class="zone-title">Zone F · Layers 21–22</div>
+              <div class="zone-desc">Self-study: forward + backward consistency</div>
+            </div>
+          </div>
+
+          <h3>Optimizations Applied</h3>
+          <ul>
+            <li>GELU activation (better than ReLU for language modeling)</li>
+            <li>GPT-style scaled weight initialization</li>
+            <li>Cosine LR schedule with linear warmup</li>
+            <li>Label smoothing (0.1) for better generalization</li>
+            <li>Nucleus sampling with repetition penalty</li>
+            <li>Reduced dropout (0.1) — standard transformer value</li>
+          </ul>
+
+          <h3>Benchmarks (same metric types as GPT/Claude research)</h3>
+          <ul>
+            <li><strong>BPC</strong> — Bits Per Character (lower = better language model)</li>
+            <li><strong>Perplexity</strong> — How "surprised" the model is by text (lower = better)</li>
+            <li><strong>Top-1 / Top-5 Accuracy</strong> — Next character prediction quality</li>
+            <li><strong>Diversity (TTR)</strong> — Type-token ratio of generated text</li>
+            <li><strong>Repetition Rate</strong> — N-gram repetition detection</li>
+            <li><strong>Fluency Score</strong> — Real word formation quality</li>
+          </ul>
+
+          <h3>Honest Comparison with Claude Opus</h3>
+          <p>Claude Opus has ~100–200 billion parameters, trained on trillions of tokens. This model has ~10 million parameters trained on hundreds of sentences. They use entirely different benchmarks (MMLU, HumanEval, etc.). The goal here is to make this model as good as it can possibly be within its scale — and to use the same types of scientific measurements used in frontier AI research.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => {
+  t.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    $(`tab-${t.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function toast(msg, ms=2500) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), ms);
+}
+
+// ── Load model info ────────────────────────────────────────────────────────
+async function loadInfo() {
+  try {
+    const r = await fetch('/api/info');
+    const d = await r.json();
+    const params = (d.parameters / 1e6).toFixed(1);
+    $('paramTag').textContent = `${params}M params`;
+    $('siParam').textContent = d.parameters.toLocaleString();
+    $('siSize').textContent = `${d.size_mb} MB`;
+    $('siBlocks').textContent = d.config.num_blocks;
+    $('siEmbed').textContent = d.config.embed_dim;
+    $('siFf').textContent = d.config.ff_dim;
+    $('siAct').textContent = d.config.activation;
+    $('siDrop').textContent = d.config.dropout;
+    if (d.benchmark && d.benchmark.overall_score != null) updateBenchmarkUI(d.benchmark);
+  } catch(e) { console.error(e); }
+}
+
+function updateBenchmarkUI(b) {
+  $('bScore').textContent = b.overall_score ?? '—';
+  $('bBpc').textContent = b.bits_per_char ?? '—';
+  const bpcPct = b.bits_per_char ? Math.max(0, 100 - (b.bits_per_char / 7) * 100) : 0;
+  $('bBpcBar').style.width = bpcPct + '%';
+  $('bTop1').textContent = (b.top1_accuracy ?? '—') + '%';
+  $('bTop1Bar').style.width = (b.top1_accuracy ?? 0) + '%';
+  $('bTop5').textContent = (b.top5_accuracy ?? '—') + '%';
+  $('bTop5Bar').style.width = (b.top5_accuracy ?? 0) + '%';
+  $('bFluency').textContent = b.fluency_score ? (b.fluency_score * 100).toFixed(1) + '%' : '—';
+  $('bFluencyBar').style.width = ((b.fluency_score ?? 0) * 100) + '%';
+  $('bSpeed').textContent = b.tokens_per_sec ? b.tokens_per_sec + ' tok/s' : '—';
+  $('bTime').textContent = b.timestamp ?? '—';
+}
+
+// ── Benchmark ──────────────────────────────────────────────────────────────
+$('btnBenchmark').addEventListener('click', async () => {
+  $('btnBenchmark').disabled = true;
+  $('btnBenchmark').textContent = 'Running…';
+  toast('Benchmark running — this takes ~1 minute', 60000);
+  try {
+    const r = await fetch('/api/benchmark', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) { toast('Error: ' + d.error, 4000); return; }
+    updateBenchmarkUI(d);
+    toast(`Benchmark done! Score: ${d.overall_score}/100`);
+  } catch(e) { toast('Benchmark failed: ' + e.message, 4000); }
+  finally {
+    $('btnBenchmark').disabled = false;
+    $('btnBenchmark').textContent = 'Run Benchmark';
+  }
+});
+
+// ── Training ───────────────────────────────────────────────────────────────
+$('stepsSlider').addEventListener('input', () => {
+  $('stepsVal').textContent = $('stepsSlider').value;
+});
+
+let trainPollTimer = null;
+
+function pollTrainStatus() {
+  trainPollTimer = setInterval(async () => {
+    const r = await fetch('/api/train/status');
+    const d = await r.json();
+    const pct = d.total ? Math.round((d.step / d.total) * 100) : 0;
+    $('progressFill').style.width = pct + '%';
+    let label = `Step ${d.step}/${d.total}`;
+    if (d.loss != null) label += ` · Loss ${d.loss}`;
+    if (d.status) label += ` · ${d.status}`;
+    $('progressLabel').textContent = label;
+
+    if (!d.running) {
+      clearInterval(trainPollTimer);
+      $('btnTrain').disabled = false;
+      $('btnTrain').textContent = '▶ Train Now';
+      $('trainProgress').classList.remove('visible');
+      if (d.status === 'done') {
+        toast('Training complete!');
+        if (d.benchmark) updateBenchmarkUI(d.benchmark);
+        loadInfo();
+      }
+    }
+  }, 1500);
+}
+
+$('btnTrain').addEventListener('click', async () => {
+  const steps = parseInt($('stepsSlider').value);
+  $('btnTrain').disabled = true;
+  $('btnTrain').textContent = 'Training…';
+  $('trainProgress').classList.add('visible');
+  $('progressFill').style.width = '0%';
+  $('progressLabel').textContent = 'Starting…';
+  toast(`Training for ${steps} steps…`, 5000);
+  try {
+    const r = await fetch('/api/train', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ steps })
+    });
+    const d = await r.json();
+    if (d.error) {
+      toast('Error: ' + d.error, 4000);
+      $('btnTrain').disabled = false;
+      $('btnTrain').textContent = '▶ Train Now';
+      $('trainProgress').classList.remove('visible');
+      return;
+    }
+    pollTrainStatus();
+  } catch(e) {
+    toast('Failed: ' + e, 4000);
+    $('btnTrain').disabled = false;
+  }
+});
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+function addMsg(text, role, meta='') {
+  const wrap = document.createElement('div');
+  wrap.className = `msg ${role}`;
+  wrap.innerHTML = `<div class="msg-bubble">${text.replace(/</g,'&lt;')}</div>${meta ? `<div class="msg-meta">${meta}</div>` : ''}`;
+  $('messages').appendChild(wrap);
+  $('messages').scrollTop = $('messages').scrollHeight;
+  return wrap;
+}
+
+function addTyping() {
+  const wrap = document.createElement('div');
+  wrap.className = 'msg model';
+  wrap.innerHTML = '<div class="msg-bubble"><div class="typing"><span></span><span></span><span></span></div></div>';
+  $('messages').appendChild(wrap);
+  $('messages').scrollTop = $('messages').scrollHeight;
+  return wrap;
+}
+
+async function sendChat() {
+  const input = $('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  $('sendBtn').disabled = true;
+
+  addMsg(text, 'user');
+  const typing = addTyping();
+
+  try {
+    const r = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: text, max_tokens: 200 })
+    });
+    const d = await r.json();
+    typing.remove();
+    if (d.error) { addMsg('Error: ' + d.error, 'model'); return; }
+    const meta = `${d.tokens} tokens · ${d.time_s}s · ${d.tokens_per_sec} tok/s`;
+    addMsg(d.generated || '(no output)', 'model', meta);
+  } catch(e) {
+    typing.remove();
+    addMsg('Network error: ' + e.message, 'model');
+  } finally {
+    $('sendBtn').disabled = false;
+    input.focus();
+  }
+}
+
+$('sendBtn').addEventListener('click', sendChat);
+$('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
+
+// ── Generate tab ───────────────────────────────────────────────────────────
+$('btnGenerate').addEventListener('click', async () => {
+  const prompt = $('promptInput').value.trim();
+  if (!prompt) return;
+  $('btnGenerate').disabled = true;
+  $('btnGenerate').textContent = 'Generating…';
+  $('outputBox').textContent = '…';
+  $('outputMeta').textContent = '';
+
+  try {
+    const r = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt,
+        max_tokens: parseInt($('maxTokens').value),
+        temperature: parseFloat($('temperature').value),
+        strategy: $('strategy').value,
+      })
+    });
+    const d = await r.json();
+    if (d.error) { $('outputBox').textContent = 'Error: ' + d.error; return; }
+    $('outputBox').textContent = d.full_text;
+    $('outputMeta').textContent = `${d.tokens} tokens · ${d.time_s}s · ${d.tokens_per_sec} tok/s`;
+  } catch(e) {
+    $('outputBox').textContent = 'Error: ' + e.message;
+  } finally {
+    $('btnGenerate').disabled = false;
+    $('btnGenerate').textContent = 'Generate';
+  }
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+loadInfo();
+</script>
+</body>
+</html>

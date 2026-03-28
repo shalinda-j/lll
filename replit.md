@@ -1,102 +1,115 @@
 # Zero-Base LLM
 
-A lightweight, experimental Large Language Model built from binary representation through ASCII encoding up to paragraph generation with bidirectional self-study.
+A fully custom language model built from the ground up — starting from binary bits (0/1) through ASCII encoding, all the way up to paragraph generation with a bidirectional self-study training loop. No borrowed pre-trained weights.
+
+## Web Interface
+
+The project is now a **public web app** running on port 5000 (Flask). Anyone can:
+- Chat with the model
+- Generate text with custom settings
+- Run the benchmark suite
+- Trigger self-improvement training rounds
+
+Start command: `python3 app.py`
 
 ## Architecture
 
 22-layer model organized into 6 Zones:
-- **Zone A (Layers 0-3):** Binary bits → ASCII characters
-- **Zone B (Layers 4-8):** Transformer Core (Attention + FFN)
-- **Zone C (Layers 9-12):** Character clustering → word-level representations
-- **Zone D (Layers 13-18):** Sentence/paragraph coherence
-- **Zone E (Layers 19-20):** Output projection and token sampling
-- **Zone F (Layers 21-22):** Self-study training loop (forward/backward consistency)
+
+- **Zone A (Layers 0–3):** Binary bits → ASCII characters (BinaryFoundation)
+- **Zone B (Layers 4–8):** Multi-head Transformer Core (GELU activation, 6 blocks)
+- **Zone C (Layers 9–12):** Character clustering → word-level representations
+- **Zone D (Layers 13–18):** Sentence / paragraph coherence (WordBuilder)
+- **Zone E (Layers 19–20):** Output projection and nucleus sampling
+- **Zone F (Layers 21–22):** Self-study training loop (forward/backward consistency)
 
 ## Tech Stack
 
 - **Language:** Python 3.12
-- **Framework:** PyTorch 2.11.0
+- **Framework:** PyTorch 2.x, Flask, Flask-CORS
 - **Package manager:** pip (`.pythonlibs/`)
 
 ## Project Layout
 
 ```
+app.py                    # Flask web server (port 5000)
+run.py                    # CLI entry point
+templates/index.html      # Full chat + generate + benchmark web UI
+checkpoints/
+  best_model.pt           # Saved model checkpoint
+  benchmark.json          # Latest benchmark scores
 zero_base_llm/
-  benchmark/         # Benchmark suite (BPC, accuracy, diversity, fluency, speed)
-    metrics.py       # BenchmarkSuite, BenchmarkResult, compare_results
-  model/             # Neural network architecture
-    layers/          # Zone implementations (zone_a.py - zone_f.py)
-    modules/         # Attention, embeddings, normalization
-  tokenizer/         # Binary → Byte → ASCII pipeline
-  training/          # SelfStudyTrainer (cosine LR warmup, label smoothing)
-  generation/        # TextGenerator, sampling strategies
-  config.py          # Hyperparameter configs (small/medium/large/xl)
-run.py               # CLI entry point
-requirements.txt     # Dependencies
+  benchmark/              # BenchmarkSuite (BPC, accuracy, diversity, fluency, speed)
+  model/
+    layers/               # Zone implementations (zone_a.py – zone_f.py)
+    modules/              # Attention, FeedForward (GELU), normalization
+  tokenizer/              # Binary → Byte → ASCII pipeline
+  training/               # SelfStudyTrainer (cosine LR warmup, label smoothing)
+  generation/             # TextGenerator, sampling strategies (nucleus/top-k/greedy)
+  config.py               # Hyperparameter configs (small/medium/large/xl)
+requirements.txt
 ```
 
 ## Configurations
 
-| Config | Params  | Size  | embed_dim | blocks | ff_dim |
-|--------|---------|-------|-----------|--------|--------|
-| small  | ~2M     | ~8MB  | 128       | 2      | 512    |
-| medium | ~10.5M  | ~41MB | 256       | 6      | 1024   |
-| large  | ~35M    | ~134MB| 512       | 8      | 2048   |
-| xl     | ~110M   | ~420MB| 768       | 12     | 3072   |
+| Config | Params  | Size   | embed_dim | blocks | ff_dim | Activation |
+|--------|---------|--------|-----------|--------|--------|------------|
+| small  | ~2M     | ~8MB   | 128       | 2      | 512    | GELU       |
+| medium | ~10.5M  | ~41MB  | 256       | 6      | 1024   | GELU       |
+| large  | ~35M    | ~134MB | 512       | 8      | 2048   | GELU       |
+| xl     | ~110M   | ~420MB | 768       | 12     | 3072   | GELU       |
 
-## Optimizations Applied (v2)
+## Optimizations Applied (v3)
 
-- **Dropout reduced**: 0.3 → 0.1 (standard transformer value; 0.3 was over-regularizing)
-- **FF dimension**: 512 → 1024 (now 4× embed_dim, GPT standard)
+- **GELU activation** throughout (replaces ReLU — standard for GPT/Claude-style models)
+- **Dropout**: 0.3 → 0.1 (standard transformer; 0.3 over-regularized)
+- **FF dimension**: 512 → 1024 (4× embed_dim, GPT standard)
 - **Transformer blocks**: 4 → 6 (more depth = better representations)
-- **Top-k sampling**: 10 → 50 (much more diverse generation)
-- **GPT-style scaled init**: residual projections scaled by 1/√(2×num_layers)
-- **Label smoothing**: 0.1 (prevents over-confident predictions)
-- **Cosine LR with linear warmup**: proper lr schedule for stable convergence
-- **AdamW eps**: added explicit eps=1e-8 for numerical stability
-- **Weight decay**: 0.01 → 0.1 (AdamW standard)
-- **Self-study weights**: 0.3 → 0.2 (let task loss dominate)
-- **Added XL config**: ~110M params, GPT-2 scale
+- **Top-k sampling**: 10 → 50 + nucleus (top-p) sampling
+- **Repetition penalty**: 1.2 (avoids degenerate loops)
+- **GPT-style scaled init**: residual projections scaled by 1/√(2×layers)
+- **Label smoothing**: 0.1 (better calibration)
+- **Cosine LR with linear warmup**: smooth learning rate schedule
+- **Weight decay**: 0.1 (AdamW standard)
 
 ## Benchmark Metrics
 
-Same metric types used to evaluate large-scale LLMs:
+| Metric               | Description                         | Direction    |
+|----------------------|-------------------------------------|--------------|
+| Bits Per Character   | Language modeling quality           | ↓ lower better |
+| Perplexity           | exp(avg NLL)                        | ↓ lower better |
+| Top-1 Accuracy       | Next character prediction           | ↑ higher better |
+| Top-5 Accuracy       | Top-5 next character prediction     | ↑ higher better |
+| Type-Token Ratio     | Generation diversity                | ↑ higher better |
+| Trigram Repetition   | Degeneration detection              | ↓ lower better |
+| ASCII Validity Rate  | Output sanity                       | ↑ higher better |
+| Fluency Score        | Word formation quality              | ↑ higher better |
+| Inference Speed      | Tokens per second                   | ↑ higher better |
 
-| Metric | Description | Direction |
-|--------|-------------|-----------|
-| Bits Per Character (BPC) | Language modeling quality | ↓ lower better |
-| Perplexity | exp(avg NLL), language quality | ↓ lower better |
-| Top-1 Accuracy | Next token prediction accuracy | ↑ higher better |
-| Top-5 Accuracy | Next token in top-5 predictions | ↑ higher better |
-| Type-Token Ratio | Generation diversity | ↑ higher better |
-| Trigram Repetition Rate | Degeneration detection | ↓ lower better |
-| ASCII Validity Rate | Output sanity | ↑ higher better |
-| Fluency Score | Word formation quality | ↑ higher better |
-| Inference Speed | Tokens per second throughput | ↑ higher better |
+## Historical Benchmark Progress
 
-## Usage
+| Round | BPC  | Perplexity | Top-1 Acc | Overall Score |
+|-------|------|------------|-----------|---------------|
+| v1    | 7.01 | 128.6      | 0.24%     | 19.59 / 100   |
+| v2    | 3.51 | 11.4       | 28.52%    | 48.77 / 100   |
+
+## CLI Usage
 
 ```bash
-# Print model info with full config
-python3 run.py --info
-python3 run.py --info --config xl
-
-# Run benchmark suite
-python3 run.py --benchmark
-
-# Train for 1000 steps then benchmark (shows before/after comparison)
-python3 run.py --benchmark --train --steps 1000
-
-# Single prompt generation
-python3 run.py --prompt "Hello world"
-
-# Interactive chat mode
-python3 run.py --interactive
-
-# Use a larger model
+python3 run.py --info                          # model info
+python3 run.py --benchmark                     # benchmark suite
+python3 run.py --benchmark --train --steps 1000  # train then benchmark
 python3 run.py --config large --train --steps 2000
+python3 run.py --prompt "Hello world"
+python3 run.py --interactive
 ```
 
-## Workflow
+## Web API
 
-The "Start application" workflow runs training + benchmark to show the model learning and measure improvement.
+```
+GET  /api/info              → model info + last benchmark
+POST /api/generate          → { prompt, max_tokens, temperature, strategy }
+POST /api/benchmark         → run full benchmark suite
+POST /api/train             → { steps } → start background training
+GET  /api/train/status      → polling endpoint for training progress
+```

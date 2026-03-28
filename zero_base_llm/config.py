@@ -27,10 +27,11 @@ class ZeroBaseConfig:
     head_dim: int = 32
     attention_dropout: float = 0.1   # Reduced from 0.3 — standard transformer value
 
-    ff_dim: int = 1024               # Increased from 512 (4× embed_dim is standard)
-    ff_dropout: float = 0.1          # Reduced from 0.3 — less aggressive regularization
+    ff_dim: int = 1024               # 4× embed_dim (GPT standard)
+    ff_dropout: float = 0.1
+    ff_activation: str = "gelu"     # GELU: better than ReLU for language models
 
-    num_transformer_blocks: int = 6  # Increased from 4 for more depth
+    num_transformer_blocks: int = 6
 
     # ==================== ZONE C: WORD BUILDING (Layers 9-12) ====================
     word_boundary_chars: List[int] = field(default_factory=lambda: [32, 44, 46, 33, 63])
@@ -90,11 +91,12 @@ class ZeroBaseConfig:
 
     @classmethod
     def small(cls) -> "ZeroBaseConfig":
-        """Small configuration for testing/debugging."""
+        """Small configuration for testing/debugging (~2M params)."""
         return cls(
             embed_dim=128,
             num_heads=4,
             ff_dim=512,
+            ff_activation="gelu",
             num_transformer_blocks=2,
             max_seq_len=256,
             word_embed_dim=256,
@@ -103,7 +105,7 @@ class ZeroBaseConfig:
 
     @classmethod
     def medium(cls) -> "ZeroBaseConfig":
-        """Medium configuration — good quality/speed balance (~8M params)."""
+        """Medium configuration — good quality/speed balance (~10M params)."""
         return cls()
 
     @classmethod
@@ -113,6 +115,7 @@ class ZeroBaseConfig:
             embed_dim=512,
             num_heads=8,
             ff_dim=2048,
+            ff_activation="gelu",
             num_transformer_blocks=8,
             max_seq_len=1024,
             word_embed_dim=768,
@@ -128,6 +131,7 @@ class ZeroBaseConfig:
             embed_dim=768,
             num_heads=12,
             ff_dim=3072,
+            ff_activation="gelu",
             num_transformer_blocks=12,
             max_seq_len=1024,
             word_embed_dim=1024,

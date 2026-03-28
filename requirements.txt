@@ -14,3 +14,5 @@ mypy
 pytest
 torch
 numpy
+flask
+flask-cors
