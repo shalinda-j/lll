@@ -1,0 +1,65 @@
+# Science fine-tuning configuration
+# Optimized for scientific reasoning, biology, chemistry, physics, earth science
+# Target GPU: A100 80GB or H100 80GB
+
+domain: "science"
+run_name: "qwen2.5-72b-science-qlora"
+
+model:
+  name: "Qwen/Qwen2.5-72B-Instruct"
+  attn_implementation: "flash_attention_2"
+
+lora:
+  r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  bias: "none"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+data:
+  # Run download_datasets.py --domain science first
+  train_files:
+    - "./data/processed/science.jsonl"
+  chat_template: "chatml"
+  num_proc: 4
+  val_size: 0.02
+
+training:
+  num_epochs: 3
+  batch_size: 2
+  eval_batch_size: 2
+  gradient_accumulation_steps: 8
+  max_seq_length: 4096
+  learning_rate: 2.0e-4
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  max_grad_norm: 0.3
+  logging_steps: 10
+  save_steps: 200
+  eval_steps: 200
+  packing: true
+  optimizer: "paged_adamw_32bit"
+  dataloader_workers: 4
+  save_total_limit: 3
+  report_to:
+    - "tensorboard"
+
+output:
+  dir: "./outputs/science"
+
+# Notes:
+# - SciQ: ~12K training examples with supporting evidence passages
+# - ARC-Challenge: ~1.1K training examples (hard reasoning required)
+# - Combined: ~13K examples; 3 epochs is sufficient
+# - Expected training time: ~2-3 hours on A100 80GB

@@ -113,3 +113,57 @@ POST /api/benchmark         → run full benchmark suite
 POST /api/train             → { steps } → start background training
 GET  /api/train/status      → polling endpoint for training progress
 ```
+
+The "Start application" workflow runs training + benchmark to show the model learning and measure improvement.
+
+---
+
+## Fine-Tuning Pipeline (Task 1)
+
+A full QLoRA fine-tuning infrastructure is in `finetune/` for training **Qwen2.5-72B-Instruct** on cloud GPUs.
+
+### Structure
+
+```
+finetune/
+  README.md                        # Quick start + overview
+  requirements_finetune.txt        # pip dependencies for cloud GPU
+  configs/
+    base.yaml                      # Shared default hyperparameters
+    code.yaml                      # Code fine-tuning (CodeSearchNet)
+    math.yaml                      # Math fine-tuning (MATH, GSM8K, NuminaMath)
+    science.yaml                   # Science fine-tuning (SciQ, ARC)
+    finance.yaml                   # Finance fine-tuning (PhraseBank, FinQA, Alpaca)
+    general.yaml                   # General chat (OpenHermes, ShareGPT)
+    combined.yaml                  # All domains mixed
+  scripts/
+    download_datasets.py           # Download + format training data to ChatML JSONL
+    train.py                       # QLoRA fine-tuning via transformers + peft + trl
+    merge_and_export.py            # Merge LoRA → HF format + GGUF export
+  docs/
+    base_model_recommendation.md   # Model selection: Qwen2.5-72B vs LLaMA 3.3
+    cloud_gpu_setup_guide.md       # Step-by-step RunPod / Lambda Labs guide
+```
+
+### Base Model Decision
+**Qwen2.5-72B-Instruct** — selected over LLaMA 3.3 70B for:
+- Superior math (+6.1pt on MATH benchmark) and reasoning (+4.8pt on BBH)
+- Comparable coding performance (within 2% on HumanEval)
+- 128K token context, multilingual (29 languages)
+- GQA (8 KV heads) reduces inference VRAM footprint
+
+### Training Approach
+- 4-bit QLoRA (NF4 quantization) — fits in 1× A100 80GB
+- Flash Attention 2 for throughput
+- LoRA rank=64, alpha=128 across all attention + FFN projection layers
+- paged_adamw_32bit optimizer
+- Gradient checkpointing enabled
+
+### Datasets
+| Domain | Sources |
+|--------|---------|
+| Code | CodeSearchNet (Python, JavaScript) |
+| Math | MATH (Hendrycks), GSM8K, NuminaMath-CoT |
+| Science | SciQ, ARC-Challenge |
+| Finance | Financial PhraseBank, FinQA, Finance Alpaca |
+| General | OpenHermes-2.5, ShareGPT |

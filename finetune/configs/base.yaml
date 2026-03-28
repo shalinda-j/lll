@@ -1,0 +1,52 @@
+# Base configuration — inherited by all domain configs
+# Override specific fields in domain-specific configs
+
+model:
+  name: "Qwen/Qwen2.5-72B-Instruct"
+  attn_implementation: "flash_attention_2"   # requires flash-attn>=2.0
+
+lora:
+  r: 64                       # LoRA rank (higher = more expressive, more memory)
+  lora_alpha: 128             # Scaling factor (usually 2× rank)
+  lora_dropout: 0.05
+  bias: "none"
+  target_modules:             # Qwen2.5 attention + FFN projection layers
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+data:
+  chat_template: "chatml"     # ChatML format (<|im_start|> tokens)
+  num_proc: 4                 # Tokenization workers
+  val_size: 0.02              # 2% validation split
+
+training:
+  num_epochs: 3
+  batch_size: 2               # Per-device; effective = batch × grad_accum = 16
+  eval_batch_size: 2
+  gradient_accumulation_steps: 8
+  max_seq_length: 4096
+  learning_rate: 2.0e-4
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  max_grad_norm: 0.3
+  logging_steps: 10
+  save_steps: 200
+  eval_steps: 200
+  packing: true               # Pack short sequences to fill context window (efficient)
+  optimizer: "paged_adamw_32bit"
+  dataloader_workers: 4
+  save_total_limit: 3
+  report_to:
+    - "tensorboard"
+
+output:
+  dir: "./outputs/base"

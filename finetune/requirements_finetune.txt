@@ -1,0 +1,39 @@
+# Fine-tuning dependencies
+# Install on your cloud GPU instance before running training scripts
+#
+# Quick install:
+#   pip install -r requirements_finetune.txt
+#
+# For flash-attn (requires CUDA 11.8+):
+#   pip install flash-attn --no-build-isolation
+
+# Core training stack
+torch>=2.2.0
+transformers>=4.45.0
+peft>=0.12.0
+trl>=0.11.0
+accelerate>=0.34.0
+bitsandbytes>=0.43.0
+
+# Data handling
+datasets>=2.20.0
+huggingface_hub>=0.25.0
+
+# Configuration
+PyYAML>=6.0
+
+# Tokenization
+sentencepiece>=0.2.0
+protobuf>=4.25.0
+
+# Monitoring and logging
+tensorboard>=2.17.0
+
+# Optional but recommended
+einops>=0.8.0           # Required by some attention implementations
+scipy>=1.13.0           # Numerical utilities
+
+# For GGUF export (install separately):
+# llama-cpp-python (CPU):   pip install llama-cpp-python
+# llama-cpp-python (CUDA):  CMAKE_ARGS="-DGGML_CUDA=on" pip install llama-cpp-python
+# Or clone llama.cpp and build manually for the convert script

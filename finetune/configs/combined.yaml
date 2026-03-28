@@ -1,0 +1,67 @@
+# Combined multi-domain fine-tuning configuration
+# Trains on all domains simultaneously for a well-rounded specialist model
+# Target GPU: 2× A100 80GB or 2× H100 80GB (larger dataset needs more GPU hours)
+# For single GPU: reduce batch_size and increase gradient_accumulation_steps
+
+domain: "combined"
+run_name: "qwen2.5-72b-combined-qlora"
+
+model:
+  name: "Qwen/Qwen2.5-72B-Instruct"
+  attn_implementation: "flash_attention_2"
+
+lora:
+  r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  bias: "none"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+data:
+  # Run download_datasets.py --domain all --merge first
+  train_files:
+    - "./data/processed/combined.jsonl"
+  chat_template: "chatml"
+  num_proc: 4
+  val_size: 0.02
+
+training:
+  num_epochs: 2                     # More data → fewer epochs needed
+  batch_size: 2
+  eval_batch_size: 2
+  gradient_accumulation_steps: 16   # Larger effective batch for stability with diverse data
+  max_seq_length: 4096
+  learning_rate: 1.5e-4             # Slightly lower for multi-domain stability
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  max_grad_norm: 0.3
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 500
+  packing: true
+  optimizer: "paged_adamw_32bit"
+  dataloader_workers: 4
+  save_total_limit: 3
+  report_to:
+    - "tensorboard"
+
+output:
+  dir: "./outputs/combined"
+
+# Notes:
+# - Combined dataset: ~250K records (50K × 5 domains)
+# - Effective batch size = 2 × 16 = 32 (for gradient stability across domains)
+# - 2 epochs ≈ 30-40 hours on A100 80GB; ~18-24 hours on H100 80GB
+# - Consider domain-specific configs first, then combine adapters if needed
+# - Alternatively, train sequentially per domain and use the last adapter

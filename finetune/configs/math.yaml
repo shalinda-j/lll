@@ -1,0 +1,65 @@
+# Math fine-tuning configuration
+# Optimized for mathematical reasoning: algebra, calculus, competition math, word problems
+# Target GPU: A100 80GB or H100 80GB
+
+domain: "math"
+run_name: "qwen2.5-72b-math-qlora"
+
+model:
+  name: "Qwen/Qwen2.5-72B-Instruct"
+  attn_implementation: "flash_attention_2"
+
+lora:
+  r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  bias: "none"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+data:
+  # Run download_datasets.py --domain math first
+  train_files:
+    - "./data/processed/math.jsonl"
+  chat_template: "chatml"
+  num_proc: 4
+  val_size: 0.02
+
+training:
+  num_epochs: 4                     # Math benefits from more epochs (smaller dataset)
+  batch_size: 2
+  eval_batch_size: 2
+  gradient_accumulation_steps: 8
+  max_seq_length: 4096
+  learning_rate: 1.5e-4             # Slightly lower LR for precise mathematical reasoning
+  lr_scheduler: "cosine"
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  bf16: true
+  fp16: false
+  gradient_checkpointing: true
+  max_grad_norm: 0.3
+  logging_steps: 10
+  save_steps: 200
+  eval_steps: 200
+  packing: true
+  optimizer: "paged_adamw_32bit"
+  dataloader_workers: 4
+  save_total_limit: 3
+  report_to:
+    - "tensorboard"
+
+output:
+  dir: "./outputs/math"
+
+# Notes:
+# - num_epochs=4 for math: step-by-step reasoning benefits from more repetitions
+# - lower learning_rate for stability during chain-of-thought fine-tuning
+# - MATH dataset has ~7.5K train examples; GSM8K adds ~7.5K more
+# - Expected training time: ~4-5 hours on A100 80GB
