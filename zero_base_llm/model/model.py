@@ -118,14 +118,31 @@ class ZeroBaseLLM(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        """Initialize weights with small values for stable training."""
-        for module in self.modules():
+        """
+        GPT-style weight initialization for stable deep network training.
+
+        - Linear layers: N(0, 0.02)
+        - Residual projection layers scaled by 1/sqrt(2 * num_layers)
+          to prevent variance explosion through residual stacks.
+        - Embeddings: N(0, 0.02)
+        - LayerNorm: weight=1, bias=0
+        """
+        num_layers = self.config.num_transformer_blocks
+        residual_scale = (2 * num_layers) ** -0.5
+
+        for name, module in self.named_modules():
             if isinstance(module, nn.Linear):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
                 if module.bias is not None:
                     nn.init.zeros_(module.bias)
+                # Scale down projection layers inside residual paths
+                if any(tag in name for tag in ["proj", "out_proj", "c_proj"]):
+                    module.weight.data.mul_(residual_scale)
             elif isinstance(module, nn.Embedding):
                 nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            elif isinstance(module, nn.LayerNorm):
+                nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
 
     def forward(
         self,

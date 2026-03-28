@@ -15,72 +15,59 @@ class ZeroBaseConfig:
     """Configuration for all 22 layers of the Zero-Base LLM."""
 
     # ==================== ZONE A: FOUNDATION (Layers 0-3) ====================
-    # Layer 0: Binary Foundation
-    # Layer 1: Byte Encoding
-    # Layer 2: ASCII Mapping
-    vocab_size: int = 128  # ASCII printable range (0-127)
-    ascii_start: int = 0   # Start of ASCII range
-    ascii_end: int = 127   # End of ASCII range
+    vocab_size: int = 128
+    ascii_start: int = 0
+    ascii_end: int = 127
 
     # ==================== ZONE B: TRANSFORMER CORE (Layers 4-8) ====================
-    # Layer 4: Character Embedding
-    embed_dim: int = 256           # Character embedding dimension
-    max_seq_len: int = 512         # Maximum sequence length
+    embed_dim: int = 256
+    max_seq_len: int = 512
 
-    # Layer 5-6: Attention
-    num_heads: int = 8             # Number of attention heads
-    head_dim: int = 32             # Dimension per head (256/8)
-    attention_dropout: float = 0.3 # Dropout for attention weights (increased to prevent overfitting)
+    num_heads: int = 8
+    head_dim: int = 32
+    attention_dropout: float = 0.1   # Reduced from 0.3 — standard transformer value
 
-    # Layer 7: Feed Forward Network
-    ff_dim: int = 512              # Hidden dimension in FFN
-    ff_dropout: float = 0.3        # Dropout for FFN (increased to prevent overfitting)
+    ff_dim: int = 1024               # Increased from 512 (4× embed_dim is standard)
+    ff_dropout: float = 0.1          # Reduced from 0.3 — less aggressive regularization
 
-    # Transformer block configuration
-    num_transformer_blocks: int = 4  # Number of transformer blocks to stack
+    num_transformer_blocks: int = 6  # Increased from 4 for more depth
 
     # ==================== ZONE C: WORD BUILDING (Layers 9-12) ====================
-    # Layer 9: Word boundary detection
-    word_boundary_chars: List[int] = field(default_factory=lambda: [32, 44, 46, 33, 63])  # space, comma, period, !, ?
-    max_word_len: int = 20         # Maximum characters per word
-    word_embed_dim: int = 512      # Word-level embedding dimension
+    word_boundary_chars: List[int] = field(default_factory=lambda: [32, 44, 46, 33, 63])
+    max_word_len: int = 20
+    word_embed_dim: int = 512
 
-    # Layer 12: Context window
-    context_window: int = 3        # Words on each side for context
+    context_window: int = 5          # Increased from 3 for wider context
 
     # ==================== ZONE D: SENTENCE/PARAGRAPH (Layers 13-18) ====================
-    # Layer 16: Sentence completion
-    temperature: float = 1.0       # Sampling temperature
+    temperature: float = 0.8         # Slightly lower than 1.0 for more focused output
 
-    # Layer 17: Multi-sentence coherence
-    topic_dim: int = 256           # Topic vector dimension
-    coherence_weight: float = 0.5  # Weight for coherence loss
+    topic_dim: int = 256
+    coherence_weight: float = 0.3    # Reduced from 0.5 — let task loss dominate
 
-    # Layer 18: Paragraph assembly
-    max_sentences: int = 10        # Maximum sentences per paragraph
-    completeness_threshold: float = 0.85  # Stop generation when score > threshold
+    max_sentences: int = 10
+    completeness_threshold: float = 0.85
 
     # ==================== ZONE E: OUTPUT (Layers 19-20) ====================
-    # Layer 20: Sampling strategies
-    top_k: int = 10                # Top-k sampling
-    top_p: float = 0.9             # Nucleus sampling probability mass
+    top_k: int = 50                  # Increased from 10 — more diverse generation
+    top_p: float = 0.92              # Slightly higher nucleus mass
 
     # ==================== ZONE F: SELF-STUDY (Layers 21-22) ====================
-    # Layer 21: Forward self-study
-    forward_study_weight: float = 0.3  # Weight for forward study loss
-
-    # Layer 22: Backward self-study
-    backward_study_weight: float = 0.3  # Weight for backward study loss
-    consistency_lambda: float = 0.5     # Lambda for consistency loss
+    forward_study_weight: float = 0.2   # Reduced from 0.3 — prevent self-study domination
+    backward_study_weight: float = 0.2
+    consistency_lambda: float = 0.3
 
     # ==================== TRAINING ====================
     learning_rate: float = 3e-4
-    weight_decay: float = 0.01
+    weight_decay: float = 0.1        # Increased from 0.01 — AdamW standard
     grad_clip: float = 1.0
     batch_size: int = 16
+    warmup_steps: int = 200          # Linear warmup before cosine decay
+    lr_scheduler: str = "cosine_warmup"  # Options: "constant", "cosine", "cosine_warmup"
+    label_smoothing: float = 0.1     # Prevents over-confident predictions
 
     # ==================== MODEL SIZE ====================
-    dtype: str = "float32"         # Options: "float32", "float16", "bfloat16"
+    dtype: str = "float32"
 
     def get_dtype(self):
         """Return the PyTorch dtype."""
@@ -94,13 +81,11 @@ class ZeroBaseConfig:
 
     def __post_init__(self):
         """Validate configuration."""
-        # Ensure embed_dim is divisible by num_heads
         if self.embed_dim % self.num_heads != 0:
             raise ValueError(
                 f"embed_dim ({self.embed_dim}) must be divisible by "
                 f"num_heads ({self.num_heads})"
             )
-        # Set head_dim based on embed_dim and num_heads
         self.head_dim = self.embed_dim // self.num_heads
 
     @classmethod
@@ -109,25 +94,47 @@ class ZeroBaseConfig:
         return cls(
             embed_dim=128,
             num_heads=4,
-            ff_dim=256,
+            ff_dim=512,
             num_transformer_blocks=2,
             max_seq_len=256,
             word_embed_dim=256,
+            warmup_steps=50,
         )
 
     @classmethod
     def medium(cls) -> "ZeroBaseConfig":
-        """Medium configuration for good quality output."""
+        """Medium configuration — good quality/speed balance (~8M params)."""
         return cls()
 
     @classmethod
     def large(cls) -> "ZeroBaseConfig":
-        """Large configuration for best quality."""
+        """Large configuration for best quality (~35M params)."""
         return cls(
             embed_dim=512,
             num_heads=8,
-            ff_dim=1024,
+            ff_dim=2048,
             num_transformer_blocks=8,
             max_seq_len=1024,
             word_embed_dim=768,
+            warmup_steps=500,
+            attention_dropout=0.1,
+            ff_dropout=0.1,
+        )
+
+    @classmethod
+    def xl(cls) -> "ZeroBaseConfig":
+        """XL configuration — maximum capacity (~110M params, GPT-2 scale)."""
+        return cls(
+            embed_dim=768,
+            num_heads=12,
+            ff_dim=3072,
+            num_transformer_blocks=12,
+            max_seq_len=1024,
+            word_embed_dim=1024,
+            warmup_steps=1000,
+            attention_dropout=0.1,
+            ff_dropout=0.1,
+            batch_size=8,
+            learning_rate=1e-4,
+            weight_decay=0.1,
         )

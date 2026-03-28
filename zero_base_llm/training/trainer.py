@@ -710,18 +710,30 @@ class SelfStudyTrainer:
             self.model.parameters(),
             lr=self.config.learning_rate,
             weight_decay=self.config.weight_decay,
-            betas=(0.9, 0.95)
+            betas=(0.9, 0.95),
+            eps=1e-8
         )
 
-        # Learning rate scheduler
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer,
-            T_max=20000,
-            eta_min=self.config.learning_rate * 0.1
+        # Learning rate scheduler (cosine decay with linear warmup)
+        self.warmup_steps = getattr(self.config, "warmup_steps", 200)
+        self.total_steps = 20000
+
+        def lr_lambda(step: int) -> float:
+            if step < self.warmup_steps:
+                return (step + 1) / max(self.warmup_steps, 1)
+            progress = (step - self.warmup_steps) / max(self.total_steps - self.warmup_steps, 1)
+            import math
+            return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * progress))
+
+        self.scheduler = optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
+
+        # Label smoothing loss
+        label_smoothing = getattr(self.config, "label_smoothing", 0.1)
+        self.criterion = torch.nn.CrossEntropyLoss(
+            label_smoothing=label_smoothing,
+            ignore_index=-100
         )
 
-        # Warmup
-        self.warmup_steps = 200
         self.current_step = 0
         self.step = 0
         self.best_val_loss = float("inf")
@@ -764,13 +776,12 @@ class SelfStudyTrainer:
         )
 
     def get_lr(self) -> float:
-        """Get current learning rate with warmup."""
-        if self.current_step < self.warmup_steps:
-            return self.config.learning_rate * (self.current_step + 1) / self.warmup_steps
-        return self.scheduler.get_last_lr()[0]
+        """Get current learning rate."""
+        lrs = self.scheduler.get_last_lr()
+        return lrs[0] if lrs else self.config.learning_rate
 
     def train_step(self, batch: torch.Tensor) -> Dict[str, float]:
-        """Single training step."""
+        """Single training step with label-smoothed loss."""
         self.model.train()
         self.optimizer.zero_grad()
 
@@ -778,26 +789,32 @@ class SelfStudyTrainer:
         targets = batch[:, 1:].contiguous()
         inputs = batch[:, :-1].contiguous()
 
-        outputs = self.model(inputs, targets=targets, use_self_study=True)
-        loss = outputs["loss"]
+        outputs = self.model(inputs, use_self_study=True)
+        char_hidden = outputs["char_hidden"]
+        char_logits = self.model.char_output_layer(char_hidden)
 
-        if "self_study_loss" in outputs:
-            loss = loss + self.config.backward_study_weight * outputs["self_study_loss"]
+        T = min(char_logits.size(1), targets.size(1))
+        loss = self.criterion(
+            char_logits[:, :T, :].reshape(-1, char_logits.size(-1)),
+            targets[:, :T].reshape(-1)
+        )
+
+        if "self_study_loss" in outputs and outputs["self_study_loss"] is not None:
+            ss_weight = getattr(self.config, "backward_study_weight", 0.2)
+            loss = loss + ss_weight * outputs["self_study_loss"]
 
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.grad_clip)
         self.optimizer.step()
+        self.scheduler.step()
 
         self.current_step += 1
-        if self.current_step > self.warmup_steps:
-            self.scheduler.step()
-
         self.step += 1
 
         return {"loss": loss.item(), "lr": self.get_lr()}
 
     def validate(self) -> float:
-        """Compute validation loss."""
+        """Compute validation loss using the same criterion as training."""
         self.model.eval()
         total_loss = 0.0
         num_batches = 0
@@ -808,8 +825,16 @@ class SelfStudyTrainer:
                 targets = batch[:, 1:].contiguous()
                 inputs = batch[:, :-1].contiguous()
 
-                outputs = self.model(inputs, targets=targets, use_self_study=False)
-                total_loss += outputs["loss"].item()
+                outputs = self.model(inputs, use_self_study=False)
+                char_hidden = outputs["char_hidden"]
+                char_logits = self.model.char_output_layer(char_hidden)
+
+                T = min(char_logits.size(1), targets.size(1))
+                loss = self.criterion(
+                    char_logits[:, :T, :].reshape(-1, char_logits.size(-1)),
+                    targets[:, :T].reshape(-1)
+                )
+                total_loss += loss.item()
                 num_batches += 1
 
         return total_loss / max(num_batches, 1)
@@ -824,7 +849,21 @@ class SelfStudyTrainer:
         generate_prompts: Optional[List[str]] = None
     ) -> Dict[str, List[float]]:
         """Training loop with validation and overfitting detection."""
-        history = {"train_loss": [], "val_loss": [], "lr": []}
+        history = {"train_loss": [], "val_loss": [], "lr": [], "loss": []}
+
+        # Sync scheduler's total steps with the actual training length
+        self.total_steps = num_steps
+        import math
+
+        def lr_lambda(step: int) -> float:
+            if step < self.warmup_steps:
+                return (step + 1) / max(self.warmup_steps, 1)
+            progress = (step - self.warmup_steps) / max(num_steps - self.warmup_steps, 1)
+            return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * progress))
+
+        for g in self.optimizer.param_groups:
+            g["lr"] = self.config.learning_rate
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, lr_lambda)
 
         if save_dir:
             save_path = Path(save_dir)
@@ -848,6 +887,7 @@ class SelfStudyTrainer:
 
             metrics = self.train_step(batch)
             history["train_loss"].append(metrics["loss"])
+            history["loss"].append(metrics["loss"])
             history["lr"].append(metrics["lr"])
 
             # Logging with validation
