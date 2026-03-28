@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(python run.py --info)",
+      "Bash(python run.py --prompt \"Hello world\" --max-tokens 30 --config small)",
+      "Bash(python run.py --train --steps 500 --config small)",
+      "Bash(python -c \"from zero_base_llm.training import SelfStudyTrainer; print\\(''Import OK''\\)\")",
+      "Bash(python run.py --info --config small)",
+      "Bash(python -u run.py --train --steps 200 --config small)",
+      "Bash(python -u run.py --train --steps 10000 --config small)",
+      "Bash(python working_diagram.py)",
+      "Bash(python -u working_diagram.py)",
+      "Bash(python -c \"print\\(''test''\\)\")",
+      "Bash(python -c \"from zero_base_llm import ZeroBaseConfig; print\\(''import ok''\\)\")",
+      "Bash(python -c \"from zero_base_llm.config import ZeroBaseConfig; print\\(''config import ok''\\)\")",
+      "Bash(python -c \"import torch; print\\(''torch ok''\\)\")",
+      "Bash(python run.py --train --steps 20000 --config medium --save trained_v2.pt)"
+    ]
+  }
+}
