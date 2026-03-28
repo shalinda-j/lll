@@ -1,0 +1,16 @@
+{
+  "model_name": "ZeroBaseLLM-6L-256D",
+  "param_count": 10583047,
+  "size_mb": 40.87209701538086,
+  "bits_per_char": 2.8779,
+  "perplexity": 7.3508,
+  "top1_accuracy": 42.97,
+  "top5_accuracy": 77.33,
+  "diversity_ttr": 0.0602,
+  "repetition_rate": 0.0067,
+  "ascii_validity": 0.7734,
+  "fluency_score": 0.0727,
+  "tokens_per_sec": 47.3,
+  "overall_score": 54.95,
+  "timestamp": "2026-03-28 09:20:13"
+}

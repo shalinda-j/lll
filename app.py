@@ -190,7 +190,7 @@ def api_train():
         return jsonify({"error": "Training already in progress"}), 409
 
     data = request.get_json(force=True)
-    steps = min(int(data.get("steps", 500)), 2000)
+    steps = min(int(data.get("steps", 500)), 5000)
 
     def _run_training():
         global _training, _training_progress, _model, _generator
