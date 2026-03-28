@@ -9,3 +9,8 @@ torch>=2.0.0
 pytest>=7.0.0
 black>=23.0.0
 mypy>=1.0.0
+black
+mypy
+pytest
+torch
+numpy
